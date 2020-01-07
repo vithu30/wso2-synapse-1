@@ -27,11 +27,12 @@ import org.apache.axis2.description.WSDL2Constants;
 import org.apache.axis2.util.JavaUtils;
 import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.config.SynapseConfigUtils;
-import org.apache.synapse.config.xml.endpoints.resolvers.ResolverFactory;
+import org.apache.synapse.commons.resolvers.ResolverFactory;
 import org.apache.synapse.config.xml.endpoints.utils.WSDL11EndpointBuilder;
 import org.apache.synapse.endpoints.Endpoint;
 import org.apache.synapse.endpoints.WSDLEndpoint;
 import org.apache.synapse.endpoints.EndpointDefinition;
+import org.apache.synapse.util.CommentListUtil;
 
 import javax.xml.namespace.QName;
 import java.io.File;
@@ -117,7 +118,6 @@ public class WSDLEndpointFactory extends DefaultEndpointFactory {
             String portName = wsdlElement.getAttributeValue(new QName("port"));
             // check if wsdl is supplied as a URI
             String wsdlURI = wsdlElement.getAttributeValue(new QName("uri"));
-            wsdlURI = ResolverFactory.getInstance().getResolver(wsdlURI).resolve();
             // set serviceName and portName in the endpoint. it does not matter if these are
             // null at this point. we are setting them only for serialization purpose.
             wsdlEndpoint.setServiceName(serviceName);
@@ -126,6 +126,7 @@ public class WSDLEndpointFactory extends DefaultEndpointFactory {
             String noParsing = properties.getProperty(SKIP_WSDL_PARSING);
 
             if (wsdlURI != null) {
+                wsdlURI = ResolverFactory.getInstance().getResolver(wsdlURI).resolve();
                 wsdlEndpoint.setWsdlURI(wsdlURI.trim());
                 if (noParsing == null || !JavaUtils.isTrueExplicitly(noParsing)) {
                     try {
@@ -194,7 +195,7 @@ public class WSDLEndpointFactory extends DefaultEndpointFactory {
 
         // process the parameters
         processProperties(wsdlEndpoint, epConfig);
-
+        CommentListUtil.populateComments(epConfig, wsdlEndpoint.getCommentsList());
         return wsdlEndpoint;
     }
 

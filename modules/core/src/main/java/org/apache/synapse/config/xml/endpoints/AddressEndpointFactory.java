@@ -23,10 +23,11 @@ import org.apache.axiom.om.OMAttribute;
 import org.apache.axiom.om.OMElement;
 import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.config.xml.XMLConfigConstants;
-import org.apache.synapse.config.xml.endpoints.resolvers.ResolverFactory;
+import org.apache.synapse.commons.resolvers.ResolverFactory;
 import org.apache.synapse.endpoints.AddressEndpoint;
 import org.apache.synapse.endpoints.Endpoint;
 import org.apache.synapse.endpoints.EndpointDefinition;
+import org.apache.synapse.util.CommentListUtil;
 
 import javax.xml.namespace.QName;
 import java.util.Properties;
@@ -77,7 +78,7 @@ public class AddressEndpointFactory extends DefaultEndpointFactory {
         OMAttribute name = epConfig.getAttribute(
                 new QName(XMLConfigConstants.NULL_NAMESPACE, "name"));
 
-        if (name != null) {
+        if (name != null && name.getAttributeValue() != null && !name.getAttributeValue().isEmpty()) {
             addressEndpoint.setName(name.getAttributeValue());
         }
 
@@ -90,7 +91,7 @@ public class AddressEndpointFactory extends DefaultEndpointFactory {
         }
 
         processProperties(addressEndpoint, epConfig);
-
+        CommentListUtil.populateComments(addressElement, addressEndpoint.getCommentsList());
         return addressEndpoint;
     }
 

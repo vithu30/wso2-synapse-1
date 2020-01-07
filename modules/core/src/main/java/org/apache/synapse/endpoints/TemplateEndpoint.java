@@ -31,8 +31,11 @@ import org.apache.synapse.commons.jmx.MBeanRegistrar;
 import org.apache.synapse.config.Entry;
 import org.apache.synapse.config.SynapseConfiguration;
 import org.apache.synapse.core.SynapseEnvironment;
+import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class TemplateEndpoint extends AbstractEndpoint {
@@ -65,6 +68,16 @@ public class TemplateEndpoint extends AbstractEndpoint {
         } else {
             sendMessage(synCtx);
         }
+    }
+
+    @Override
+    protected void createJsonRepresentation() {
+
+        endpointJson = new JSONObject();
+        endpointJson.put(NAME_JSON_ATT, getName());
+        endpointJson.put(TYPE_JSON_ATT, "Template Endpoint");
+        endpointJson.put("parameters", getParameters());
+        endpointJson.put("template", getTemplate());
     }
 
     public void sendMessage(MessageContext synCtx) {

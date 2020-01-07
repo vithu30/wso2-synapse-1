@@ -18,6 +18,7 @@
  */
 package org.apache.synapse.transport.certificatevalidation;
 
+import org.apache.synapse.commons.crypto.CryptoConstants;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
@@ -46,6 +47,7 @@ public class Utils {
 
 
     public X509Certificate generateFakeRootCert(KeyPair pair) throws Exception {
+
         X500Name subjectDN = new X500Name("CN=Test End Certificate");
         Date notBefore = new Date(System.currentTimeMillis());
         Date notAfter = new Date(System.currentTimeMillis() + TestConstants.VALIDITY_PERIOD);
@@ -53,13 +55,16 @@ public class Utils {
         X509v3CertificateBuilder builder = new X509v3CertificateBuilder(subjectDN, BigInteger.valueOf(1),
                 notBefore, notAfter, subjectDN, subPubKeyInfo);
 
-        AlgorithmIdentifier sigAlgId = new DefaultSignatureAlgorithmIdentifierFinder().find("SHA1WithRSAEncryption");
+        AlgorithmIdentifier sigAlgId = new DefaultSignatureAlgorithmIdentifierFinder()
+                .find("SHA1WithRSAEncryption");
         AlgorithmIdentifier digAlgId = new DefaultDigestAlgorithmIdentifierFinder().find(sigAlgId);
 
         ContentSigner contentSigner = new BcRSAContentSignerBuilder(sigAlgId, digAlgId)
                 .build(PrivateKeyFactory.createKey(pair.getPrivate().getEncoded()));
         X509CertificateHolder certificateHolder = builder.build(contentSigner);
-        return new JcaX509CertificateConverter().setProvider("BC").getCertificate(certificateHolder);
+
+        return new JcaX509CertificateConverter().setProvider(CryptoConstants.BOUNCY_CASTLE_PROVIDER)
+                .getCertificate(certificateHolder);
     }
 
 
@@ -84,10 +89,9 @@ public class Utils {
         Date notAfter = new Date(System.currentTimeMillis() + TestConstants.VALIDITY_PERIOD);
         SubjectPublicKeyInfo subPubKeyInfo = SubjectPublicKeyInfo.getInstance(peerPublicKey.getEncoded());
 
-        X509v3CertificateBuilder builder = new X509v3CertificateBuilder(
+        return new X509v3CertificateBuilder(
                 subjectDN, serialNumber, notBefore, notAfter,
                 subjectDN, subPubKeyInfo);
-        return builder;
     }
 
     /**
@@ -134,8 +138,8 @@ public class Utils {
                 .build(PrivateKeyFactory.createKey(entityKeyPair.getPrivate().getEncoded()));
 
         X509CertificateHolder certificateHolder = certBuilder.build(contentSigner);
-        X509Certificate entityCert = new JcaX509CertificateConverter().setProvider("BC")
-                .getCertificate(certificateHolder);
+        X509Certificate entityCert = new JcaX509CertificateConverter()
+                .setProvider(CryptoConstants.BOUNCY_CASTLE_PROVIDER).getCertificate(certificateHolder);
         return new X509Certificate[]{entityCert, rootCert};
     }
 

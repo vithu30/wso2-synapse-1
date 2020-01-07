@@ -18,19 +18,13 @@
  */
 package org.apache.synapse.mediators.elementary;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
-import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
-import com.jayway.jsonpath.Option;
-import com.jayway.jsonpath.spi.json.GsonJsonProvider;
-import com.jayway.jsonpath.spi.json.JsonProvider;
-import com.jayway.jsonpath.spi.mapper.GsonMappingProvider;
-import com.jayway.jsonpath.spi.mapper.MappingProvider;
-import java.util.EnumSet;
-import java.util.Set;
 import org.apache.axiom.om.OMAttribute;
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.om.OMNode;
@@ -171,7 +165,7 @@ public class Target {
             OMElement e = body.getFirstElement();
 
             if (e != null) {
-                insertElement(sourceNodeList, e, synLog);
+                insertElementToBody(sourceNodeList, e, synLog, synContext);
             } else {
                 // if the body is empty just add as a child
                 for (OMNode elem : sourceNodeList) {
@@ -275,6 +269,34 @@ public class Target {
     }
 
     /**
+     * This method is needed to check whether the sourceElement is a JSON.
+     * If it is json, the body will replaced with the JSONUtil method.
+     * Else, it will be treated as OM objects and continue with insertElement method
+     *
+     * @param sourceNodeList Evaluated Json Element by the Source.
+     * @param e OMElement which needs to be passed in to insertElement
+     * @param synLog Default Logger for the package.
+     * @param synCtx Current Message Context.
+     */
+    private void insertElementToBody(ArrayList<OMNode> sourceNodeList, OMElement e, SynapseLog synLog,
+                                     MessageContext synCtx) {
+        if (action.equals(ACTION_REPLACE) && !sourceNodeList.isEmpty() && sourceNodeList.get(0) instanceof OMText) {
+            String sourceString = ((OMText)sourceNodeList.get(0)).getText();
+            JsonElement jsonElement = jsonParser.parse(sourceString);
+            if (jsonElement instanceof JsonObject || jsonElement instanceof JsonArray) {
+                try {
+                    JsonUtil.getNewJsonPayload(((Axis2MessageContext) synCtx).getAxis2MessageContext(),
+                            sourceString, true, true);
+                    return;
+                } catch (AxisFault af) {
+                    log.error("Could not add json object to the json stream", af);
+                }
+            }
+        }
+        insertElement(sourceNodeList, e, synLog);
+    }
+
+    /**
      * Handles enrichment of properties when defined as a custom type
      *
      * @param xpath          expression to get property
@@ -352,12 +374,12 @@ public class Target {
      * @param synLog Default Logger for the package.
      */
     public void insertJson(MessageContext synCtx, Object sourceJsonElement, SynapseLog synLog) {
-        JsonParser jsonParser = new JsonParser();
+
         String jsonPath = null;
         SynapseJsonPath sourceJsonPath = null;
         if (xpath != null) {
             sourceJsonPath = (SynapseJsonPath) this.xpath;
-            jsonPath = sourceJsonPath.getJsonPath().getPath();
+            jsonPath = sourceJsonPath.getJsonPathExpression();
         }
 
         switch (targetType) {
@@ -367,14 +389,25 @@ public class Target {
                 break;
             }
             case EnrichMediator.BODY: {
-                org.apache.axis2.context.MessageContext context = ((Axis2MessageContext) synCtx).
-                        getAxis2MessageContext();
-                try {
-                    String jsonString = JsonPath.using(Configuration.defaultConfiguration()).parse(sourceJsonElement).
-                            json().toString();
-                    JsonUtil.getNewJsonPayload(context, jsonString, true, true);
-                } catch (AxisFault axisFault) {
-                    synLog.error("Error occurred while adding a new JSON payload");
+                if (action.equalsIgnoreCase(ACTION_REPLACE)) {
+                    org.apache.axis2.context.MessageContext context = ((Axis2MessageContext) synCtx).
+                            getAxis2MessageContext();
+                    try {
+                        String jsonString = sourceJsonElement.toString();
+                        JsonElement element = jsonParser.parse(jsonString);
+                        if (element instanceof JsonObject || element instanceof JsonArray) {
+                            JsonUtil.getNewJsonPayload(context, jsonString, true, true);
+                        } else {
+                            synLog.error("Unsupported JSON payload : " + jsonString
+                                    + ".Only JSON arrays and objects can be enriched to the body");
+                        }
+
+                    } catch (AxisFault axisFault) {
+                        synLog.error("Error occurred while adding a new JSON payload");
+                    }
+                } else {
+                    synLog.error("Unsupported action : " + action + ". " +
+                            "Only replace is supported for target body.");
                 }
                 break;
             }
@@ -382,7 +415,7 @@ public class Target {
                 JsonElement jsonElement = jsonParser.parse(sourceJsonElement.toString());
                 if (action.equalsIgnoreCase(ACTION_REPLACE)) {
                     // replacing the property with new value
-                    synCtx.setProperty(property, jsonElement.toString());
+                    synCtx.setProperty(property, sourceJsonElement.toString());
                 } else if (action.equalsIgnoreCase(ACTION_ADD_CHILD)) {
                     Object propertyObj = synCtx.getProperty(property);
                     if (propertyObj != null) {
@@ -407,9 +440,12 @@ public class Target {
                 }
                 break;
             }
-            default: synLog.error("Case mismatch for type: " + targetType);
+            default: {
+                synLog.error("Case mismatch for type: " + targetType);
+            }
         }
     }
+
 
     /**
      * Set the enriched JSON result to body.
@@ -426,6 +462,8 @@ public class Target {
             expression = expression.substring(0, expression.length() - 1);
         }
 
+        boolean isRootPath = "$".equals(expression);
+
         org.apache.axis2.context.MessageContext context = ((Axis2MessageContext) synapseContext)
                 .getAxis2MessageContext();
 
@@ -435,17 +473,11 @@ public class Target {
         String newJsonString = "";
 
         if (action.equalsIgnoreCase(ACTION_REPLACE)) {
-            // replaces an existing value in json
             newJsonString = JsonPath.parse(jsonString).set(expression, sourceNode).jsonString();
         } else if (action.equalsIgnoreCase(ACTION_ADD_CHILD)) {
-            newJsonString = getNewJSONString(sourceNode, expression, jsonString, expression, false);
+            newJsonString = getNewJSONString(sourceNode, expression, jsonString, isRootPath);
         } else if (action.equalsIgnoreCase(ACTION_ADD_SIBLING)) {
-            String parentPath = synapseJsonPath.getParentPath();
-            if (parentPath != null) {
-                newJsonString = getNewJSONString(sourceNode, expression, jsonString, parentPath, true);
-            } else {
-                log.error("Cannot add as a sibling since current element is the root element");
-            }
+            log.error("Action sibling is not supported. Please use child action instead");
         } else {
             // invalid action
             log.error("Invalid action set: " + action);
@@ -465,28 +497,30 @@ public class Target {
      * @param sourceNode JsonElement which needs to be inserted.
      * @param expression Json-path which points the location to be inserted.
      * @param jsonString Target payload as a string.
-     * @param parentPath Parent path of expression.
-     * @param isSibling to be added as sibling or child.
+     * @param isRootPath Flag which indicates expression is root or not
      * @return formatted string.
      */
-    private String getNewJSONString(Object sourceNode, String expression, String jsonString, String parentPath,
-                                    boolean isSibling) {
+    private String getNewJSONString(Object sourceNode, String expression, String jsonString,
+                                    boolean isRootPath) {
         String newJsonString;
         DocumentContext documentContext = JsonPath.parse(jsonString);
-        JsonElement receivingElement = documentContext.read(parentPath);
+        JsonElement receivingElement = documentContext.read(expression);
         JsonElement sourceElement = EIPUtils.tryParseJsonString(jsonParser, sourceNode.toString());
         if (receivingElement.isJsonArray()) {
             receivingElement.getAsJsonArray().add(sourceElement);
+        } else if (receivingElement.isJsonObject() && sourceElement.isJsonObject()) {
+            EIPUtils.mergeJsonObjects(receivingElement.getAsJsonObject(), sourceElement.getAsJsonObject());
         } else {
-            log.error("Cannot append since the target element / parent of  target element is not a JSON array: " +
+            log.error("Cannot append since the target element is not a JSON array or JSONObject: " +
                     receivingElement.toString());
         }
-        if (isSibling) {
-            documentContext.set(parentPath, receivingElement);
+        if (isRootPath) {
+            newJsonString = receivingElement.toString();
         } else {
             documentContext.set(expression, receivingElement);
+            newJsonString = documentContext.json().toString();
         }
-        newJsonString = documentContext.json().toString();
+
         return newJsonString;
     }
 

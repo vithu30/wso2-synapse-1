@@ -18,13 +18,23 @@
  */
 package org.apache.synapse.mediators.elementary;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSyntaxException;
+import org.apache.axiom.om.OMElement;
 import org.apache.axiom.om.OMNode;
-import org.apache.axis2.AxisFault;
+import org.apache.axiom.om.OMText;
+import org.apache.axiom.om.impl.llom.OMTextImpl;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseLog;
+import org.apache.synapse.commons.json.Constants;
 import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.mediators.AbstractMediator;
+import org.apache.synapse.transport.passthru.PassThroughConstants;
 import org.jaxen.JaxenException;
 
 import java.util.ArrayList;
@@ -89,11 +99,60 @@ public class EnrichMediator extends AbstractMediator {
             }
         }
 
+        org.apache.axis2.context.MessageContext axis2MsgCtx = ((Axis2MessageContext) synCtx).getAxis2MessageContext();
+
+        JsonParser jsonParser = new JsonParser();
+
+        //A JsonElement to store the parsed json object, so that it can be used without parsing the string continuously
+        JsonElement sourcePropertyJson = null;
+
+        /*
+        * Here we are checking whether the source Property is of XML type,
+        * so that we can decide on the flow (Jsonpath or xpath)
+        * A value stored in a property can be of type ArrayList, OMElement or String
+        */
+        boolean isSourcePropertyXML = false;
+        Object sourceProperty = synCtx.getProperty(source.getProperty());
+        if (sourceProperty instanceof OMElement) {
+            isSourcePropertyXML = true;
+        } else if (sourceProperty instanceof ArrayList) {
+            for (Object node : (ArrayList) sourceProperty) {
+                if (node instanceof OMText) {
+                    String propertyString = ((OMTextImpl) node).getText();
+                    try {
+                        sourcePropertyJson = jsonParser.parse(propertyString);
+                        if (!(sourcePropertyJson instanceof JsonObject || sourcePropertyJson instanceof JsonArray)) {
+                            isSourcePropertyXML = true;
+                            break;
+                        }
+                    } catch (JsonSyntaxException e) {
+                        synLog.traceOrDebug("Source is not a valid json");
+                        isSourcePropertyXML = true;
+                    }
+                } else if (node instanceof OMElement) {
+                    isSourcePropertyXML = true;
+                    break;
+                }
+            }
+        } else if (sourceProperty instanceof String) {
+            try {
+                sourcePropertyJson = jsonParser.parse((String) sourceProperty);
+                if (!(sourcePropertyJson instanceof JsonObject || sourcePropertyJson instanceof JsonArray
+                        || sourcePropertyJson instanceof JsonPrimitive)) {
+                    isSourcePropertyXML = true;
+                }
+            } catch (JsonSyntaxException e) {
+                synLog.traceOrDebug("Source string is not a valid json");
+                isSourcePropertyXML = true;
+            }
+        }
+
+
         boolean hasJSONPayload = JsonUtil.hasAJsonPayload(((Axis2MessageContext) synCtx).getAxis2MessageContext());
-        if (isNativeJsonSupportEnabled && hasJSONPayload) {
+        if (isNativeJsonSupportEnabled && hasJSONPayload && !isSourcePropertyXML) {
             Object sourceNode;
             try {
-                sourceNode = source.evaluateJson(synCtx, synLog);
+                sourceNode = source.evaluateJson(synCtx, synLog, sourcePropertyJson);
                 if (sourceNode == null) {
                     handleException("Failed to get the source for Enriching : ", synCtx);
                 } else {
@@ -114,15 +173,21 @@ public class EnrichMediator extends AbstractMediator {
             } catch (JaxenException e) {
                 handleException("Failed to get the source for Enriching", e, synCtx);
             }
+
+            // Removing the JSON stream since the payload is now updated.
+            // Json-eval and other JsonUtil functions now needs to convert XML -> JSON
+            // related to wso2/product-ei/issues/1771
+            if (target.getTargetType() == EnrichMediator.BODY || target.getTargetType() == EnrichMediator.CUSTOM) {
+                axis2MsgCtx.removeProperty(Constants.ORG_APACHE_SYNAPSE_COMMONS_JSON_JSON_INPUT_STREAM);
+            }
         }
 
-        //If enrich mediator modifies JSON payload update JSON stream in the axis2MessageContext
-        org.apache.axis2.context.MessageContext axis2MsgCtx =
-                ((Axis2MessageContext) synCtx).getAxis2MessageContext();
-        if (JsonUtil.hasAJsonPayload(axis2MsgCtx)) {
-            JsonUtil.setJsonStream(axis2MsgCtx,
-                                   JsonUtil.toJsonStream(axis2MsgCtx.getEnvelope().getBody().getFirstElement()));
+        //  If we enrich the body or envelope we need to remove the NO_ENTITY_BODY property
+        //  Related issue https://github.com/wso2/product-ei/issues/3586
+        if (target.getTargetType() == EnrichMediator.BODY || target.getTargetType() == EnrichMediator.ENVELOPE) {
+            axis2MsgCtx.removeProperty(PassThroughConstants.NO_ENTITY_BODY);
         }
+
         synLog.traceOrDebug("End : Enrich mediator");
         return true;
     }

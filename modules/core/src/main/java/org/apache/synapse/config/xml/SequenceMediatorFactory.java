@@ -108,6 +108,7 @@ public class SequenceMediatorFactory extends AbstractListMediatorFactory {
                 throw new SynapseException(msg);
             }
         }
+        addAllCommentChildrenToList(elem, seqMediator.getCommentsList());
         return seqMediator;
     }
 }

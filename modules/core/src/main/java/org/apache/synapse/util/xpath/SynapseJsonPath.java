@@ -18,11 +18,15 @@
  */
 package org.apache.synapse.util.xpath;
 
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonObject;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
+import com.jayway.jsonpath.PathNotFoundException;
 import com.jayway.jsonpath.spi.json.GsonJsonProvider;
 import com.jayway.jsonpath.spi.json.JsonProvider;
 import com.jayway.jsonpath.spi.mapper.GsonMappingProvider;
@@ -42,6 +46,7 @@ import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.config.SynapsePropertiesLoader;
 import org.apache.synapse.config.xml.SynapsePath;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
+import org.apache.synapse.mediators.eip.EIPUtils;
 import org.jaxen.JaxenException;
 
 import java.io.IOException;
@@ -86,7 +91,7 @@ public class SynapseJsonPath extends SynapsePath {
         super(jsonPathExpression, SynapsePath.JSON_PATH, log);
 
         // Set default configuration for Jayway JsonPath
-        setJsonPathConfiguration();
+        EIPUtils.setJsonPathConfiguration();
 
         this.contentAware = true;
         this.expression = jsonPathExpression;
@@ -100,27 +105,6 @@ public class SynapseJsonPath extends SynapsePath {
             isWholeBody = true;
         }
         this.setPathType(SynapsePath.JSON_PATH);
-    }
-
-    // Set default configuration for Jayway JsonPath
-    private void setJsonPathConfiguration() {
-        Configuration.setDefaults(new Configuration.Defaults() {
-
-            private final JsonProvider jsonProvider = new GsonJsonProvider();
-            private final MappingProvider mappingProvider = new GsonMappingProvider();
-
-            public JsonProvider jsonProvider() {
-                return jsonProvider;
-            }
-
-            public MappingProvider mappingProvider() {
-                return mappingProvider;
-            }
-
-            public Set<Option> options() {
-                return EnumSet.noneOf(Option.class);
-            }
-        });
     }
 
     public String stringValueOf(final String jsonString) {
@@ -276,6 +260,11 @@ public class SynapseJsonPath extends SynapsePath {
             if (object != null) {
                 if (object instanceof List && !jsonPath.isDefinite()) {
                     result = (List) object;
+                } else if (object instanceof JsonArray) {
+                    for (JsonElement element:
+                            (JsonArray) object) {
+                        result.add(element);
+                    }
                 } else {
                     result.add(object);
                 }
@@ -300,6 +289,10 @@ public class SynapseJsonPath extends SynapsePath {
      * @return corrected jsonObject.
      */
     private Object formatJsonPathResponse(Object input) {
+        // Return numeric result of ison-eval() as it is Ex: .length() function
+        if (input instanceof Number) {
+            return input;
+        }
         JsonElement jsonElement = (JsonElement) input;
         if (jsonElement.isJsonPrimitive()) {
             return jsonElement.getAsString();
@@ -313,5 +306,53 @@ public class SynapseJsonPath extends SynapsePath {
             return jsonObject.toString();
         }
         return jsonElement.isJsonArray() ? jsonElement : null;
+    }
+
+    /**
+     * Replaces first matching item with a given child object.
+     * Updated root object will be return back to the caller
+     *
+     * @param rootObject
+     *            Root JSON Object or Array
+     * @param newChild
+     *            New jsonObject to replace
+     * @return Updated Root Object
+     */
+    public Object replace(Object rootObject, Object newChild) {
+        if (isWholeBody) {
+            rootObject = newChild;
+
+        } else {
+            JsonParser parser = new JsonParser();
+            JsonElement jsonElement = parser.parse(rootObject.toString());
+
+            Object attachPathObject = null;
+
+            //this try catch block evaluates whether the attachPath is valid and available in the root Object
+            try {
+                attachPathObject = formatJsonPathResponse(JsonPath.parse(jsonElement.toString()).read(getJsonPath()));
+
+            } catch (PathNotFoundException e) {
+                handleException("Unable to get the attach path specified by the expression " + expression, e);
+            }
+
+            if (attachPathObject != null) {
+                rootObject =
+                        JsonPath.parse(jsonElement.toString()).set(expression, newChild).jsonString();
+
+            }
+
+        }
+        return rootObject;
+    }
+
+    /**
+     * This method will return the boolean value of the jsonpath.
+     *
+     * @param synCtx message context
+     * @return boolean value
+     */
+    public boolean booleanValueOf(MessageContext synCtx) {
+        return Boolean.parseBoolean(this.stringValueOf(synCtx));
     }
 }

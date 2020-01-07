@@ -18,7 +18,7 @@
 
 package org.apache.synapse.commons.json;
 
-final class Constants {
+public final class Constants {
     private Constants() {
     }
 
@@ -113,5 +113,21 @@ final class Constants {
      */
     public static final String SYNAPSE_JSON_TO_XML_PROCESS_INSTRUCTION_ENABLE = "synapse.json.to.xml.processing.instruction.enabled";
 
+    /*Property which holds the synapse commons json stream of payload*/
+    public static final String ORG_APACHE_SYNAPSE_COMMONS_JSON_JSON_INPUT_STREAM = "org.apache.synapse.commons.json.JsonInputStream";
+
+    public static final String SYNAPSE_COMMONS_ENABLE_XML_NIL_READ_WRITE = "synapse.commons.enableXmlNilReadWrite";
+
+    public static final String SYNAPSE_COMMONS_JSON_DISABLE_AUTO_PRIMITIVE_CUSTOM_REPLACE_REGEX =
+            "synapse.commons.json.json.output.disableAutoPrimitive.customReplaceRegex";
+
+    public static final String SYNAPSE_COMMONS_JSON_DISABLE_AUTO_PRIMITIVE_CUSTOM_REPLACE_SEQUENCE =
+            "synapse.commons.json.json.output.disableAutoPrimitive.customReplaceSequence";
+
+    public static final String SYNAPSE_COMMONS_ENABLE_XML_NULL_FOR_EMPTY_ELEMENT =
+            "synapse.commons.enableXmlNullForEmptyElement";
+
+    // Property to preserve spaces in XML -> JSON transformation
+    public static final String PRESERVE_SPACES = "PRESERVE_SPACES";
 
 }

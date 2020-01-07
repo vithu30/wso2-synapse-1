@@ -44,6 +44,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.protocol.HTTP;
 import org.apache.synapse.SynapseConstants;
+import org.apache.synapse.SynapseException;
 import org.apache.synapse.commons.throttle.core.ConcurrentAccessController;
 import org.apache.synapse.commons.throttle.core.ConcurrentAccessReplicator;
 import org.apache.synapse.endpoints.EndpointDefinition;
@@ -52,6 +53,7 @@ import org.apache.synapse.rest.RESTConstants;
 import org.apache.synapse.transport.nhttp.NhttpConstants;
 import org.apache.synapse.transport.passthru.PassThroughConstants;
 import org.apache.synapse.transport.passthru.config.PassThroughConfiguration;
+import org.apache.synapse.util.MediatorPropertyUtils;
 import org.apache.synapse.util.MessageHelper;
 
 import javax.mail.internet.ContentType;
@@ -145,9 +147,9 @@ public class Axis2FlexibleMEPClient {
         }
 
         if (originalInMsgCtx.isPropertyTrue(PassThroughConstants.CORRELATION_LOG_STATE_PROPERTY)) {
-           if (originalInMsgCtx.getProperty(PassThroughConstants.CORRELATION_ID) == null){
-               originalInMsgCtx.setProperty(PassThroughConstants.CORRELATION_ID, UUID.randomUUID().toString());
-           }
+            if (originalInMsgCtx.getProperty(PassThroughConstants.CORRELATION_ID) == null) {
+                originalInMsgCtx.setProperty(PassThroughConstants.CORRELATION_ID, UUID.randomUUID().toString());
+            }
             headers.put(PassThroughConfiguration.getInstance().getCorrelationHeaderName(),
                     originalInMsgCtx.getProperty(PassThroughConstants.CORRELATION_ID).toString());
         }
@@ -204,6 +206,16 @@ public class Axis2FlexibleMEPClient {
                 if (axisOutMsgCtx.getSoapAction() == null && axisOutMsgCtx.getWSAAction() != null) {
                     axisOutMsgCtx.setSoapAction(axisOutMsgCtx.getWSAAction());
                 }
+
+                // If the incoming is rest, then message need to be serialized prior to the conversion.
+                if (originalInMsgCtx.isDoingREST()) {
+                    try {
+                        MediatorPropertyUtils.serializeOMElement(synapseOutMessageContext);
+                    } catch (Exception e) {
+                        handleException("Error while serializing the  message", e);
+                    }
+                }
+
                 if (!axisOutMsgCtx.isSOAP11()) {
                     SOAPUtils.convertSOAP12toSOAP11(axisOutMsgCtx);
                 }
@@ -701,6 +713,7 @@ public class Axis2FlexibleMEPClient {
             isRestRequest = Constants.Configuration.HTTP_METHOD_GET.equals(httpMethod)
                     || Constants.Configuration.HTTP_METHOD_DELETE.equals(httpMethod)
                     || Constants.Configuration.HTTP_METHOD_PUT.equals(httpMethod)
+                    || Constants.Configuration.HTTP_METHOD_PATCH.equals(httpMethod)
                     || RESTConstants.METHOD_OPTIONS.equals(httpMethod)
                     || Constants.Configuration.HTTP_METHOD_HEAD.equals(httpMethod);
 
@@ -735,5 +748,9 @@ public class Axis2FlexibleMEPClient {
             return true;
         }
         return false;
+    }
+
+    private static void handleException(String msg, Exception e) {
+        throw new SynapseException(msg, e);
     }
 }

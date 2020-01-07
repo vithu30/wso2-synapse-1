@@ -19,9 +19,17 @@
 
 package org.apache.synapse.mediators.eip;
 
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.Option;
+import com.jayway.jsonpath.spi.json.GsonJsonProvider;
+import com.jayway.jsonpath.spi.json.JsonProvider;
+import com.jayway.jsonpath.spi.mapper.GsonMappingProvider;
+import com.jayway.jsonpath.spi.mapper.MappingProvider;
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.om.OMNode;
 import org.apache.axiom.soap.SOAPEnvelope;
@@ -35,8 +43,10 @@ import org.apache.synapse.util.xpath.SynapseXPath;
 import org.jaxen.JaxenException;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Utility methods for the EIP mediators
@@ -45,6 +55,9 @@ public class EIPUtils {
 
     private static final Log log = LogFactory.getLog(EIPUtils.class);
 
+    private static final String JSON_MEMBERS = "members";
+
+    private static final String JSON_ELEMENTS = "elements";
     /**
      * Return the set of elements specified by the XPath over the given envelope
      *
@@ -255,15 +268,101 @@ public class EIPUtils {
      * @return parsed JsonElement.
      */
     public static JsonElement tryParseJsonString(JsonParser parser, String inputJson) {
-        JsonElement result;
         try {
-            result = parser.parse(inputJson);
+            return parser.parse(validateStringForGson(inputJson));
         } catch (JsonSyntaxException e) {
-            // Enclosing using quotes due to the following issue
-            // https://github.com/google/gson/issues/1286
-            inputJson = "\"" + inputJson + "\"";
-            result = parser.parse(inputJson);
+            log.error(inputJson + " cannot be parsed to a valid JSON payload", e);
+            return null;
         }
-        return result;
     }
+
+    /**
+     * Enclose the string with quotes before parsing with Gson library.
+     * Due to : https://github.com/google/gson/issues/1286
+     *
+     * @param input input String.
+     * @return validated String.
+     */
+    private static String validateStringForGson(String input) {
+        String output = input;
+        try {
+            Double.parseDouble(input);
+        } catch (NumberFormatException e) {
+            // not a number
+            if (!(input.equals("true") || input.equals("false"))) {
+                // not a boolean
+                if (!(input.startsWith("[") && input.endsWith("]"))) {
+                    // not a JSON array
+                    if (!(input.startsWith("{") && input.endsWith("}"))) {
+                        // not a JSON object
+                        if(!(input.startsWith("\"") && input.endsWith("\""))) {
+                            // not a string with quotes -> then add quotes
+                            output = "\"" + input + "\"";
+                        }
+                    }
+                }
+            }
+        }
+        return output;
+    }
+
+    /**
+     * Formats the response from jsonpath operations
+     * JayWay json-path response have additional elements like "members"(for objects) and "elements"(for arrays)
+     * This method will correct such strings by removing additional elements.
+     *
+     * @param input input jsonElement.
+     * @return corrected jsonObject.
+     */
+    public static Object formatJsonPathResponse(Object input) {
+        JsonElement jsonElement = (JsonElement) input;
+        if (jsonElement.isJsonPrimitive()) {
+            return jsonElement.getAsString();
+        } else if(jsonElement.isJsonObject()) {
+            JsonObject jsonObject = jsonElement.getAsJsonObject();
+            if (jsonObject.has(JSON_MEMBERS)) {
+                return jsonObject.get(JSON_MEMBERS);
+            } else if (jsonObject.has(JSON_ELEMENTS)) {
+                return jsonObject.get(JSON_ELEMENTS);
+            }
+            return jsonObject.toString();
+        }
+        return jsonElement.isJsonArray() ? jsonElement : null;
+    }
+
+    /**
+     * This merges two json objects into one. The PrimaryPayload will have the merged object
+     * @param primaryPayload The json object where the key value pairs will be added
+     * @param secondaryPayload The json object whose key value pair will be added to primaryPayload
+     */
+    public static void mergeJsonObjects(JsonObject primaryPayload, JsonObject secondaryPayload) {
+        for (String key : secondaryPayload.keySet()) {
+            primaryPayload.add(key, secondaryPayload.get(key));
+        }
+    }
+
+
+    /**
+     * Set default configuration for Jayway JsonPath by providing the JsonProviders and Mapping providers
+     */
+    public static void setJsonPathConfiguration() {
+        Configuration.setDefaults(new Configuration.Defaults() {
+
+            private final JsonProvider jsonProvider = new GsonJsonProvider(new GsonBuilder().serializeNulls().create());
+            private final MappingProvider mappingProvider = new GsonMappingProvider();
+
+            public JsonProvider jsonProvider() {
+                return jsonProvider;
+            }
+
+            public MappingProvider mappingProvider() {
+                return mappingProvider;
+            }
+
+            public Set<Option> options() {
+                return EnumSet.noneOf(Option.class);
+            }
+        });
+    }
+
 }

@@ -318,9 +318,10 @@ public class ValidateMediator extends AbstractListMediator implements FlowContin
                     if (itrErrorMessages.hasNext()) {
                         ProcessingMessage processingMessage = itrErrorMessages.next();
                         String errorMessage = processingMessage.getMessage();
+                        String errorDetail = processingMessage.toString();
                         synCtx.setProperty(SynapseConstants.ERROR_MESSAGE, errorMessage);
                         synCtx.setProperty(SynapseConstants.ERROR_DETAIL, "Error while validating Json message "
-                                + errorMessage);
+                                + errorDetail);
                     }
                     // invokes the "on-fail" sequence of mediator
                     return invokeOnFailSequence(synCtx);
@@ -422,7 +423,7 @@ public class ValidateMediator extends AbstractListMediator implements FlowContin
                             setUserDefinedSchemaResourceResolver(synCtx);
                         } else {
                             factory.setResourceResolver(
-                                    new SchemaResourceResolver(synCtx.getConfiguration(), resourceMap));
+                                    new SchemaResourceResolver(synCtx.getConfiguration(), resourceMap, synCtx));
                         }
                         if (cacheSchema) {
                             cachedSchema = factory.newSchema(sources);
@@ -573,23 +574,6 @@ public class ValidateMediator extends AbstractListMediator implements FlowContin
      * @param synapseEnvironment synapse environment
      */
     public void init(SynapseEnvironment synapseEnvironment) {
-        if (Boolean.parseBoolean(synapseEnvironment.getSynapseConfiguration()
-                .getProperty(SYNAPSE_VALIDATE_MEDIATOR_REDEPLOYMENT_CACHE_CLEAR))) {
-            for (Value schemaKey : schemaKeys) {
-                Entry entry = synapseEnvironment.getSynapseConfiguration().getEntryDefinition(schemaKey.getKeyValue());
-                if (entry != null) {
-                    synapseEnvironment.getSynapseConfiguration().removeEntry(schemaKey.getKeyValue());
-                }
-            }
-            if (resourceMap != null && resourceMap.getResources().size() > 0) {
-                for (Map.Entry<String, String> resource : resourceMap.getResources().entrySet()) {
-                    Entry entry = synapseEnvironment.getSynapseConfiguration().getEntryDefinition(resource.getValue());
-                    if (entry != null) {
-                        synapseEnvironment.getSynapseConfiguration().removeEntry(resource.getValue());
-                    }
-                }
-            }
-        }
         super.init(synapseEnvironment);
     }
 

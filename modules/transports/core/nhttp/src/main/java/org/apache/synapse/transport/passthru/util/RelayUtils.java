@@ -24,6 +24,7 @@ import org.apache.axis2.AxisFault;
 import org.apache.axis2.Constants;
 import org.apache.axis2.addressing.AddressingConstants;
 import org.apache.axis2.addressing.AddressingHelper;
+import org.apache.axis2.context.ConfigurationContext;
 import org.apache.axis2.context.MessageContext;
 import org.apache.axis2.description.WSDL2Constants;
 import org.apache.axis2.engine.AxisConfiguration;
@@ -117,7 +118,7 @@ public class RelayUtils {
                     }
                 }
 
-                builldMessage(messageContext, earlyBuild, in);
+                buildMessage(messageContext, earlyBuild, in);
                 return;
             }
         } else {
@@ -130,7 +131,7 @@ public class RelayUtils {
         }
     }
 
-    public static void builldMessage(MessageContext messageContext, boolean earlyBuild,
+    public static void buildMessage(MessageContext messageContext, boolean earlyBuild,
                                      InputStream in) throws IOException, AxisFault {
         ByteArrayOutputStream byteArrayOutputStream = null;
         if (forceXmlValidation || forceJSONValidation) {
@@ -149,8 +150,8 @@ public class RelayUtils {
             try {
                 bufferedInputStream.reset();
                 bufferedInputStream.mark(0);
-            } catch (IOException e) {
-                handleException("Error while checking bufferedInputStream", e);
+            } catch (Exception e) {
+                // just ignore the error
             }
 
         } else {
@@ -186,7 +187,7 @@ public class RelayUtils {
                     try {
                         String contentType = (String) messageContext.getProperty(Constants.Configuration.CONTENT_TYPE);
 
-                        if (PassThroughConstants.JSON_CONTENT_TYPE.equals(contentType) && forceJSONValidation) {
+                        if (PassThroughConstants.JSON_CONTENT_TYPE.equals(getMIMEContentType(contentType)) && forceJSONValidation) {
                             rawData = byteArrayOutputStream.toString();
                             JsonParser jsonParser = new JsonParser();
                             jsonParser.parse(rawData);
@@ -215,6 +216,26 @@ public class RelayUtils {
         return;
     }
 
+    /**
+     * Get MIME content type out of content-type header
+     * @param contentType content type header value
+     * @return MIME content type
+     */
+    public static String getMIMEContentType(String contentType) {
+        String type;
+        int index = contentType.indexOf(';');
+        if (index > 0) {
+            type = contentType.substring(0, index);
+        } else {
+            int commaIndex = contentType.indexOf(',');
+            if (commaIndex > 0) {
+                type = contentType.substring(0, commaIndex);
+            } else {
+                type = contentType;
+            }
+        }
+        return type;
+    }
 
     /**
      * Function to check whether the processing request (enclosed within MessageContext) is a DELETE request without
@@ -223,55 +244,20 @@ public class RelayUtils {
      * @param msgContext MessageContext
      * @return whether the request is a DELETE without payload
      */
-    public static boolean isDeleteRequestWithoutPayload (MessageContext msgContext) throws AxisFault {
+    public static boolean isDeleteRequestWithoutPayload (MessageContext msgContext) {
         if (PassThroughConstants.HTTP_DELETE.equals(msgContext.getProperty(Constants.Configuration.HTTP_METHOD))) {
 
             //If message builder not invoked (Passthrough may contain entity body) OR delete with payload
             if (!Boolean.TRUE.equals(msgContext.getProperty(PassThroughConstants.MESSAGE_BUILDER_INVOKED)) ||
                     !Boolean.TRUE.equals(msgContext.getProperty(PassThroughConstants.NO_ENTITY_BODY))) {
                 //HTTP DELETE request with payload
-                if (!isEmptyPayloadStream(msgContext)) {
-                    return false;
-                }
+                return false;
             }
             //Empty payload delete request
             return true;
         }
         //Not a HTTP DELETE request
         return false;
-    }
-
-    private static boolean isEmptyPayloadStream(MessageContext messageContext) throws AxisFault {
-
-        boolean isEmpty = false;
-        BufferedInputStream bufferedInputStream = (BufferedInputStream) messageContext
-                .getProperty(PassThroughConstants.BUFFERED_INPUT_STREAM);
-        if (bufferedInputStream != null) {
-            try {
-                bufferedInputStream.reset();
-                bufferedInputStream.mark(0);
-            } catch (Exception e) {
-                // just ignore the error
-            }
-
-        } else {
-            final Pipe pipe = (Pipe) messageContext.getProperty(PassThroughConstants.PASS_THROUGH_PIPE);
-            if (pipe != null) {
-                InputStream in = pipe.getInputStream();
-                bufferedInputStream = new BufferedInputStream(in);
-                // TODO: need to handle properly for the moment lets use around 100k
-                // buffer.
-                bufferedInputStream.mark(128 * 1024);
-                messageContext.setProperty(PassThroughConstants.BUFFERED_INPUT_STREAM,
-                        bufferedInputStream);
-            }
-        }
-        try {
-            isEmpty = RelayUtils.isEmptyPayloadStream(bufferedInputStream);
-        } catch (IOException e) {
-            handleException("Error while checking Message Payload Exists ", e);
-        }
-        return isEmpty;
     }
 
     /**
@@ -281,24 +267,26 @@ public class RelayUtils {
      *
      */
     public static boolean shouldOverwriteContentType(MessageContext msgContext, TargetRequest request) {
-
         boolean builderInvoked = Boolean.TRUE.equals(msgContext
                 .getProperty(PassThroughConstants.MESSAGE_BUILDER_INVOKED));
-
         boolean noEntityBodySet =
                 Boolean.TRUE.equals(msgContext.getProperty(PassThroughConstants.NO_ENTITY_BODY));
-
         Map<String, LinkedHashSet<String>> headers = request.getHeaders();
         boolean contentTypeInRequest = false;
         if (headers.size() != 0 && (headers.get("Content-Type") != null || headers.get("content-type") != null)) {
             contentTypeInRequest = true;
         }
-        
-        // If builder is not invoked, which means the passthrough scenario, we should overwrite the content-type 
+        boolean isDefaultContentTypeEnabled = false;
+        ConfigurationContext configurationContex = msgContext.getConfigurationContext();
+        if (configurationContex != null && configurationContex.getAxisConfiguration()
+                .getParameter(NhttpConstants.REQUEST_CONTENT_TYPE) != null) {
+            isDefaultContentTypeEnabled = true;
+        }
+        // If builder is not invoked, which means the passthrough scenario, we should overwrite the content-type
         // depending on the presence of the incoming content-type.
         // If builder is invoked and no entity body property is not set (which means there is a payload in the request)
         // we should consider overwriting the content-type.
-        return (builderInvoked && !noEntityBodySet) || contentTypeInRequest;
+        return (builderInvoked && !noEntityBodySet) || contentTypeInRequest || isDefaultContentTypeEnabled;
     }
 
     /**
@@ -368,8 +356,9 @@ public class RelayUtils {
             }
         }
 
-        messageContext.setProperty(AddressingConstants.DISABLE_ADDRESSING_FOR_IN_MESSAGES, "false");
-
+        if (messageContext.getProperty(AddressingConstants.DISABLE_ADDRESSING_FOR_IN_MESSAGES) == null) {
+            messageContext.setProperty(AddressingConstants.DISABLE_ADDRESSING_FOR_IN_MESSAGES, "false");
+        }
         Object disableAddressingForOutGoing = null;
         if (messageContext.getProperty(AddressingConstants.DISABLE_ADDRESSING_FOR_OUT_MESSAGES) != null) {
             disableAddressingForOutGoing = messageContext
@@ -494,6 +483,9 @@ public class RelayUtils {
             try {
                 while (!pipe.isProducerCompleted() || pipe.isConsumeRequired()) {
                     consume(pipe);
+                    if (pipe.isProducerError()) {
+                        break;
+                    }
                 }
             } catch (IOException exception) {
                 handleException("Error when consuming the input stream to discard", exception);

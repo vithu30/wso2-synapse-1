@@ -27,6 +27,7 @@ import org.apache.synapse.rest.API;
 import org.apache.synapse.rest.Handler;
 import org.apache.synapse.rest.RESTConstants;
 import org.apache.synapse.rest.Resource;
+import org.apache.synapse.util.CommentListUtil;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -49,6 +50,10 @@ public class APISerializer {
         }
         if (api.getPort() != -1) {
             apiElt.addAttribute("port", String.valueOf(api.getPort()), null);
+        }
+
+        if (api.getSwaggerResourcePath() != null) {
+            apiElt.addAttribute("publishSwagger", api.getSwaggerResourcePath(), null);
         }
 
         StatisticsConfigurable statisticsConfigurable = api.getAspectConfiguration();
@@ -103,7 +108,7 @@ public class APISerializer {
         } else if (api.getProtocol() == RESTConstants.PROTOCOL_HTTPS_ONLY) {
             apiElt.addAttribute("transports", Constants.TRANSPORT_HTTPS, null);
         }
-
+        CommentListUtil.serializeComments(apiElt, api.getCommentsList());
         return apiElt;
     }
 

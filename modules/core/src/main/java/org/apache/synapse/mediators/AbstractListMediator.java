@@ -116,6 +116,12 @@ public abstract class AbstractListMediator extends AbstractMediator
             // Now create matcher object.
             Matcher msgBuildFailureExMatcher = msgBuildFailureExpattern.matcher(ExceptionUtils.getStackTrace(synEx));
             if (msgBuildFailureExMatcher.find()) {
+                // Setting error details for parsing failures
+                synCtx.setProperty(SynapseConstants.ERROR_CODE, SynapseConstants.MESSAGE_PARSING_ERROR);
+                synCtx.setProperty(SynapseConstants.ERROR_MESSAGE, synEx.getMessage().split("\n")[0]);
+                synCtx.setProperty(SynapseConstants.ERROR_DETAIL, ExceptionUtils.getStackTrace(synEx));
+                synCtx.setProperty(SynapseConstants.ERROR_EXCEPTION, synEx.toString());
+                
                 consumeInputOnOmException(synCtx);
             }
             throw synEx;
@@ -155,6 +161,10 @@ public abstract class AbstractListMediator extends AbstractMediator
 
     public boolean addChild(Mediator m) {
         return mediators.add(m);
+    }
+
+    public void addChild(int index, Mediator m) {
+        mediators.add(index, m);
     }
 
     public boolean addAll(List<Mediator> c) {

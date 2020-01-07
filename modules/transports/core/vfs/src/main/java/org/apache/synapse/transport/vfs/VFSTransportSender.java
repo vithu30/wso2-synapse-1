@@ -162,12 +162,7 @@ public class VFSTransportSender extends AbstractTransportSender implements Manag
      */
     public void sendMessage(MessageContext msgCtx, String targetAddress,
                             OutTransportInfo outTransportInfo) throws AxisFault {
-
-        if (waitForSynchronousResponse(msgCtx)) {
-            throw new AxisFault("The VFS transport doesn't support synchronous responses. " +
-                    "Please use the appropriate (out only) message exchange pattern.");
-        }
-
+        setOutOnlyMep(msgCtx);
         VFSOutTransportInfo vfsOutInfo = null;
         if (targetAddress != null) {
             vfsOutInfo = new VFSOutTransportInfo(targetAddress, globalFileLockingFlag);
@@ -282,15 +277,9 @@ public class VFSTransportSender extends AbstractTransportSender implements Manag
                         // before uploading the file
                         if (vfsOutInfo.isFileLockingEnabled()) {
                             acquireLockForSending(responseFile, vfsOutInfo, fso);
-                            if (!responseFile.exists()) {
-                                responseFile.createFile();
-                            }
                             populateResponseFile(responseFile, msgCtx,append, true, fso);
                             VFSUtils.releaseLock(fsManager, responseFile, fso);
                         } else {
-                            if (!responseFile.exists()) {
-                                responseFile.createFile();
-                            }
                             populateResponseFile(responseFile, msgCtx,append, false, fso);
                         }
 
@@ -314,11 +303,9 @@ public class VFSTransportSender extends AbstractTransportSender implements Manag
                     // if file locking is not disabled acquire the lock before uploading the file
                     if (vfsOutInfo.isFileLockingEnabled()) {
                         acquireLockForSending(replyFile, vfsOutInfo, fso);
-                        replyFile.createFile();
                         populateResponseFile(replyFile, msgCtx, append, true, fso);
                         VFSUtils.releaseLock(fsManager, replyFile, fso);
                     } else {
-                        replyFile.createFile();
                         populateResponseFile(replyFile, msgCtx, append, false, fso);
                     }
                 }
@@ -443,5 +430,13 @@ public class VFSTransportSender extends AbstractTransportSender implements Manag
             }
         }
         return null;
+    }
+
+    /** This method sets out-only as the message exchange pattern
+     * */
+    private void setOutOnlyMep(MessageContext msgCtx) {
+        if (msgCtx.getAxisOperation() != null && msgCtx.getAxisOperation().getMessageExchangePattern() != null) {
+            msgCtx.getAxisOperation().setMessageExchangePattern("http://www.w3.org/ns/wsdl/out-only");
+        }
     }
 }

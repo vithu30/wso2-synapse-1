@@ -19,10 +19,13 @@
 package org.apache.synapse.transport.certificatevalidation;
 
 import junit.framework.TestCase;
+import org.apache.synapse.commons.crypto.CryptoConstants;
 import org.apache.synapse.transport.certificatevalidation.crl.CRLCache;
 import org.apache.synapse.transport.certificatevalidation.crl.CRLVerifier;import org.bouncycastle.asn1.DERObjectIdentifier;
 import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x509.*;
+import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
+import org.bouncycastle.asn1.x509.CRLNumber;
+import org.bouncycastle.asn1.x509.Extension;
 import org.bouncycastle.cert.X509CRLHolder;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v2CRLBuilder;
@@ -41,7 +44,10 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 import java.lang.reflect.Method;
 import java.math.BigInteger;
-import java.security.*;
+import java.security.KeyPair;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.Security;
 import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.util.Date;
@@ -123,6 +129,7 @@ public class CRLVerifierTest extends TestCase {
      */
     public static X509CRL createCRL(X509Certificate caCert, PrivateKey caPrivateKey, BigInteger revokedSerialNumber)
             throws Exception {
+
         JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
         Date now = new Date();
         X500Name issuer = X500Name.getInstance(PrincipalUtil.getIssuerX509Principal(caCert).getEncoded());
@@ -133,10 +140,10 @@ public class CRLVerifierTest extends TestCase {
                 extUtils.createAuthorityKeyIdentifier(caCert));
         builder.addExtension(Extension.cRLNumber, false, new CRLNumber(BigInteger.valueOf(1)));
         JcaContentSignerBuilder contentSignerBuilder = new JcaContentSignerBuilder("SHA256WithRSAEncryption");
-        contentSignerBuilder.setProvider("BC");
+        contentSignerBuilder.setProvider(CryptoConstants.BOUNCY_CASTLE_PROVIDER);
         X509CRLHolder cRLHolder = builder.build(contentSignerBuilder.build(caPrivateKey));
         JcaX509CRLConverter converter = new JcaX509CRLConverter();
-        converter.setProvider("BC");
+        converter.setProvider(CryptoConstants.BOUNCY_CASTLE_PROVIDER);
         return converter.getCRL(cRLHolder);
     }
 
@@ -148,14 +155,16 @@ public class CRLVerifierTest extends TestCase {
         X509v3CertificateBuilder certBuilder = utils.getUsableCertificateBuilder(entityKey, serialNumber);
         certBuilder.copyAndAddExtension(Extension.cRLDistributionPoints, false,
                 new JcaX509CertificateHolder(firstCertificate));
-        AlgorithmIdentifier sigAlgId = new DefaultSignatureAlgorithmIdentifierFinder().find("SHA1WithRSAEncryption");
+        AlgorithmIdentifier sigAlgId = new DefaultSignatureAlgorithmIdentifierFinder()
+                .find("SHA1WithRSAEncryption");
         AlgorithmIdentifier digAlgId = new DefaultDigestAlgorithmIdentifierFinder().find(sigAlgId);
 
         ContentSigner contentSigner = new BcRSAContentSignerBuilder(sigAlgId, digAlgId)
                 .build(PrivateKeyFactory.createKey(caKey.getEncoded()));
 
         X509CertificateHolder certificateHolder = certBuilder.build(contentSigner);
-        return new JcaX509CertificateConverter().setProvider("BC").getCertificate(certificateHolder);
+        return new JcaX509CertificateConverter().setProvider(CryptoConstants.BOUNCY_CASTLE_PROVIDER)
+                .getCertificate(certificateHolder);
     }
 
 }

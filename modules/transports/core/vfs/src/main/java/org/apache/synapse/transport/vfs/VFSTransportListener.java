@@ -60,6 +60,23 @@ import org.apache.synapse.commons.vfs.VFSParamDTO;
 import org.apache.synapse.commons.vfs.VFSUtils;
 import org.wso2.securevault.SecretResolver;
 import org.wso2.securevault.SecureVaultException;
+import org.wso2.securevault.commons.MiscellaneousUtil;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.StringTokenizer;
+import javax.mail.internet.ContentType;
+import javax.mail.internet.ParseException;
+import javax.xml.namespace.QName;
 
 import java.io.File;
 import java.io.IOException;
@@ -917,19 +934,11 @@ public class VFSTransportListener extends AbstractPollingTransportListener<PollT
             String propertyValue = parameter.getValue().toString();
             OMElement paramElement = parameter.getParameterElement();
             if (paramElement != null) {
-                OMAttribute attribute = paramElement.getAttribute(
-                        new QName(CryptoConstants.SECUREVAULT_NAMESPACE,
-                                  CryptoConstants.SECUREVAULT_ALIAS_ATTRIBUTE));
-                if (attribute != null && attribute.getAttributeValue() != null
-                    && !attribute.getAttributeValue().isEmpty()) {
-                    if (secretResolver == null) {
-                        throw new SecureVaultException("Cannot resolve secret password because axis2 secret resolver " +
-                                                       "is null");
-                    }
-                    if (secretResolver.isTokenProtected(attribute.getAttributeValue())) {
-                        propertyValue = secretResolver.resolve(attribute.getAttributeValue());
-                    }
+                if (secretResolver == null) {
+                    throw new SecureVaultException("Cannot resolve secret password because axis2 secret resolver " +
+                                                   "is null");
                 }
+                propertyValue = MiscellaneousUtil.resolve(paramElement, secretResolver);
             }
 
             properties.setProperty(parameter.getName().toString(), propertyValue);

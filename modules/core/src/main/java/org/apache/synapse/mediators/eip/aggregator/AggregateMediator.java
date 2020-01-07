@@ -203,6 +203,11 @@ public class AggregateMediator extends AbstractMediator implements ManagedLifecy
                         handleException("Failed to evaluate correlate expression: " + correlateExpression.toString(), synCtx);
                     }
                 }
+                if(result instanceof Boolean) {
+                    if (!(Boolean)result) {
+                        return true;
+                    }
+                }
             }
             if (result != null) {
 
@@ -532,7 +537,7 @@ public class AggregateMediator extends AbstractMediator implements ManagedLifecy
             
             if (newCtx == null) {
                 try {
-                    newCtx = MessageHelper.cloneMessageContextForAggregateMediator(synCtx);
+                    newCtx = MessageHelper.cloneMessageContext(synCtx, true, false, true);
                 } catch (AxisFault axisFault) {
                     handleException(aggregate, "Error creating a copy of the message", axisFault, synCtx);
                 }

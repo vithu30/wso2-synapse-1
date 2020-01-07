@@ -20,12 +20,21 @@
  */
 package org.apache.synapse.config.xml;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSyntaxException;
 import org.apache.axiom.om.OMAbstractFactory;
 import org.apache.axiom.om.OMAttribute;
 import org.apache.axiom.om.OMElement;
+import org.apache.axiom.om.OMText;
+import org.apache.axiom.om.impl.llom.OMTextImpl;
 import org.apache.commons.lang.StringUtils;
 import org.apache.synapse.Mediator;
 import org.apache.synapse.SynapseException;
+import org.apache.synapse.util.xpath.SynapseJsonPath;
 import org.jaxen.JaxenException;
 
 import javax.xml.namespace.QName;
@@ -86,10 +95,34 @@ public class EnrichMediatorFactory extends AbstractMediatorFactory {
         populateSource(source, sourceEle);
         populateTarget(target, targetEle);
 
+        // check whether the inline element of the source is XML
+        boolean isInlineSourceXML = false;
+        if (source.getInlineOMNode() != null) {
+            if (source.getInlineOMNode() instanceof OMText) {
+                String inlineString = ((OMTextImpl) source.getInlineOMNode()).getText();
+                JsonParser parser = new JsonParser();
+                try {
+                    JsonElement element = parser.parse(inlineString);
+                    if (!(element instanceof JsonObject || element instanceof JsonArray ||
+                            element instanceof JsonPrimitive)) {
+                        isInlineSourceXML = true;
+                    }
+                } catch (JsonSyntaxException ex) {
+                    // cannot parse with JSON. Going ahead with XML
+                    isInlineSourceXML = true;
+                }
+            } else if (source.getInlineOMNode() instanceof OMElement) {
+                isInlineSourceXML = true;
+            }
+        }
+
         // Check the enrich mediator configuration to see whether it can support JSON natively
         boolean sourceHasCustom = (source.getSourceType() == EnrichMediator.CUSTOM);
         boolean targetHasCustom = (target.getTargetType() == EnrichMediator.CUSTOM);
         boolean enrichHasCustom = (sourceHasCustom || targetHasCustom);
+        boolean sourceHasEnvelope = (source.getSourceType() == EnrichMediator.ENVELOPE);
+        boolean targetHasEnvelope = (target.getTargetType() == EnrichMediator.ENVELOPE);
+        boolean enrichHasEnvelope = (sourceHasEnvelope || targetHasEnvelope);
 
         boolean sourceHasACustomJsonPath = false;
         boolean targetHasACustomJsonPath = false;
@@ -107,8 +140,13 @@ public class EnrichMediatorFactory extends AbstractMediatorFactory {
         boolean condition2 = (sourceHasACustomJsonPath && !targetHasCustom);
         boolean condition3 = (!sourceHasCustom && targetHasACustomJsonPath);
         boolean condition4 = (sourceHasACustomJsonPath && targetHasACustomJsonPath);
+        boolean condition5 = !enrichHasEnvelope;
 
-        enrich.setNativeJsonSupportEnabled(condition1 || condition2 || condition3 || condition4);
+        enrich.setNativeJsonSupportEnabled(
+                !isInlineSourceXML && condition5 && (condition1 || condition2 || condition3 ||
+                                                                   condition4));
+        addAllCommentChildrenToList(elem, enrich.getCommentsList());
+
         return enrich;
     }
 
@@ -194,6 +232,14 @@ public class EnrichMediatorFactory extends AbstractMediatorFactory {
                 } catch (JaxenException e) {
                     handleException("Invalid XPath expression: " + xpathAttr);
                 }
+                SynapsePath targetXPath = target.getXpath();
+                if (target.getAction().equals(Target.ACTION_REPLACE) && (targetXPath instanceof SynapseJsonPath)
+                        && ("$".equals(((SynapseJsonPath) targetXPath).expression) ||
+                        "$.".equals(((SynapseJsonPath) targetXPath).expression))) {
+                    handleException("Acting replace is not supported for root path in type custom. " +
+                            "Please use type body action replace instead");
+                }
+
             } else {
                 handleException("xpath attribute is required for CUSTOM type");
             }

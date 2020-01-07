@@ -59,9 +59,11 @@ import org.apache.synapse.transport.http.conn.ClientSSLSetupHandler;
 import org.apache.synapse.transport.http.conn.SSLContextDetails;
 import org.apache.synapse.transport.nhttp.NhttpConstants;
 import org.apache.synapse.transport.nhttp.NoValidateCertTrustManager;
+import org.apache.synapse.transport.nhttp.util.SecureVaultValueReader;
 import org.wso2.securevault.SecretResolver;
 import org.wso2.securevault.SecretResolverFactory;
 import org.wso2.securevault.SecureVaultException;
+import org.wso2.securevault.commons.MiscellaneousUtil;
 
 public class ClientConnFactoryBuilder {
 
@@ -311,8 +313,8 @@ public class ClientConnFactoryBuilder {
             if (keyPasswordElement == null) {
                 throw new AxisFault("Cannot proceed because KeyPassword element is missing in KeyStore");
             }
-            String  storePassword = getSecureVaultValue(resolver, passwordElement);
-            String keyPassword = getSecureVaultValue(resolver, keyPasswordElement);
+            String  storePassword = SecureVaultValueReader.getSecureVaultValue(resolver, passwordElement);
+            String keyPassword = SecureVaultValueReader.getSecureVaultValue(resolver, keyPasswordElement);
 
             FileInputStream fis = null;
             try {
@@ -355,7 +357,7 @@ public class ClientConnFactoryBuilder {
             if (passwordElement == null) {
                 throw new AxisFault("Cannot proceed because Password element is missing in TrustStore");
             }
-            String storePassword = getSecureVaultValue(resolver, passwordElement);
+            String storePassword = SecureVaultValueReader.getSecureVaultValue(resolver, passwordElement);
 
             FileInputStream fis = null;
             try {
@@ -416,10 +418,10 @@ public class ClientConnFactoryBuilder {
         if (keyStoreElt != null) {
             String location = keyStoreElt.getFirstChildWithName(new QName("Location")).getText();
             String type = keyStoreElt.getFirstChildWithName(new QName("Type")).getText();
-            String storePassword = getSecureVaultValue(secretResolver, keyStoreElt.getFirstChildWithName(new QName
-                    ("Password")));
-            String keyPassword = getSecureVaultValue(secretResolver, keyStoreElt.getFirstChildWithName(new QName
-                    ("KeyPassword")));
+            String storePassword = SecureVaultValueReader.getSecureVaultValue(secretResolver,
+                    keyStoreElt.getFirstChildWithName(new QName("Password")));
+            String keyPassword = SecureVaultValueReader.getSecureVaultValue(secretResolver,
+                    keyStoreElt.getFirstChildWithName(new QName("KeyPassword")));
          
             try (FileInputStream fis = new FileInputStream(location)) { 
                 KeyStore keyStore = KeyStore.getInstance(type);             
@@ -547,22 +549,14 @@ public class ClientConnFactoryBuilder {
     }
 
     private String getSecureVaultValue(SecretResolver secretResolver, OMElement paramElement) {
+
         String value = null;
         if (paramElement != null) {
-            OMAttribute attribute = paramElement.getAttribute(new QName(CryptoConstants.SECUREVAULT_NAMESPACE,
-                    CryptoConstants.SECUREVAULT_ALIAS_ATTRIBUTE));
-            if (attribute != null && attribute.getAttributeValue() != null && !attribute.getAttributeValue().isEmpty
-                    ()) {
-                if (secretResolver == null) {
-                    throw new SecureVaultException("Cannot resolve secret password because axis2 secret resolver " +
-                            "is null");
-                }
-                if (secretResolver.isTokenProtected(attribute.getAttributeValue())) {
-                    value = secretResolver.resolve(attribute.getAttributeValue());
-                }
-            } else {
-                value = paramElement.getText();
+            if (secretResolver == null) {
+                throw new SecureVaultException("Cannot resolve secret password because axis2 secret resolver " +
+                        "is null");
             }
+            value = MiscellaneousUtil.resolve(paramElement, secretResolver);
         }
         return value;
     }

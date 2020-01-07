@@ -928,7 +928,9 @@ public class SynapseConfiguration implements ManagedLifecycle, SynapseArtifact {
                 o.entryRemoved((Entry) entry);
             }
         } else {
-            handleException("No entry exists by the key : " + key);
+            if (log.isDebugEnabled()) {
+                log.debug("No entry exists by the key : " + key);
+            }
         }
     }
 
@@ -1529,9 +1531,6 @@ public class SynapseConfiguration implements ManagedLifecycle, SynapseArtifact {
             ((ManagedLifecycle) registry).init(se);
         }
 
-        //we initialize xpath extensions here since synapse environment is available
-        initXpathExtensions(se);
-
         initCarbonTenantConfigurator(se);
 
         //initialize endpoints
@@ -1996,8 +1995,6 @@ public class SynapseConfiguration implements ManagedLifecycle, SynapseArtifact {
             //Fixing ESBJAVA-4225
             if (localRegistry.get(key.trim()) instanceof Entry && ((Entry) localRegistry.get(key.trim())).getValue() != null) {
                 handleException("Duplicate " + type + " definition for key : " + key);
-            } else {
-                handleException("Duplicate " + type + " definition for key : " + key);
             }
         }
     }
@@ -2145,35 +2142,6 @@ public class SynapseConfiguration implements ManagedLifecycle, SynapseArtifact {
 
     public void setAllowHotUpdate(boolean allowHotUpdate) {
         this.allowHotUpdate = allowHotUpdate;
-    }
-
-    /**
-     * This method initializes Xpath Extensions available through synapse.properties file
-     * Xpath Extensions can be defined in Variable Context Extensions + Function Context Extensions
-     * synapse.xpath.var.extensions --> Variable Extensions
-     * synapse.xpath.func.extensions --> Function Extensions
-     *
-     * @param synapseEnvironment SynapseEnvironment
-     */
-    private void initXpathExtensions(SynapseEnvironment synapseEnvironment) {
-        Axis2SynapseEnvironment axis2SynapseEnvironment = (Axis2SynapseEnvironment) synapseEnvironment;
-
-        /*Initialize Function Context extensions for xpath
-        */
-        List<SynapseXpathFunctionContextProvider> functionExtensions =
-                XpathExtensionUtil.getRegisteredFunctionExtensions();
-        for (SynapseXpathFunctionContextProvider functionExtension : functionExtensions) {
-            axis2SynapseEnvironment.setXpathFunctionExtensions(functionExtension);
-        }
-
-        /*Initialize Variable Context extensions for xpath
-        */
-        List<SynapseXpathVariableResolver> variableExtensions =
-                XpathExtensionUtil.getRegisteredVariableExtensions();
-        for (SynapseXpathVariableResolver variableExtension : variableExtensions) {
-            axis2SynapseEnvironment.setXpathVariableExtensions(variableExtension);
-        }
-
     }
 
     /**

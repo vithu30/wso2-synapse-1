@@ -16,7 +16,7 @@
 	<parent>
 		<groupId>org.apache.synapse</groupId>
 		<artifactId>Apache-Synapse</artifactId>
-		<version>2.1.7-wso2v86-SNAPSHOT</version>
+		<version>2.1.7-wso2v144-SNAPSHOT</version>
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
@@ -184,22 +184,23 @@
 							org.apache.synapse.inbound.*,
 							org.apache.synapse.startup.*,
 							org.apache.synapse.util.*,
+							org.apache.synapse.unittest.*,
 							org.apache.synapse.libraries.*,
 							org.apache.synapse.carbonext.*,
                             org.apache.synapse.continuation.*,
                             org.apache.synapse.debug.*,
-                            org.apache.synapse.messageflowtracer.*
+                            org.apache.synapse.messageflowtracer.*,
                         </Export-Package>
-						<Import-Package>
-							!javax.xml.namespace,
-							javax.xml.namespace;
-							version=0.0.0,
-							!javax.xml.soap,
-							javax.xml.soap; version=${javax.xml.soap.version},
-							!org.apache.commons.io,
-							org.apache.commons.io; version=0.0.0,
-							org.quartz.*;version="${quartz.version}",
-							*;resolution:=optional,
+                        <Import-Package>
+                            !javax.xml.namespace,
+                            !javax.xml.soap,
+                            !org.apache.commons.io,
+                            javax.xml.namespace;
+                            version=0.0.0,
+                            javax.xml.soap; version=${javax.xml.soap.version},
+                            org.apache.commons.io; version=0.0.0,
+                            org.quartz.*;version="${quartz.version}",
+                            *;resolution:=optional
                         </Import-Package>
 						<DynamicImport-Package>*</DynamicImport-Package>
 					</instructions>
@@ -276,6 +277,10 @@
 			<artifactId>commons-lang</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>org.wso2.orbit.commons-text</groupId>
+			<artifactId>commons-text</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-text</artifactId>
 		</dependency>
@@ -348,6 +353,10 @@
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
         </dependency>
+		<dependency>
+			<groupId>com.google.code.gson</groupId>
+			<artifactId>gson</artifactId>
+		</dependency>
         <dependency>
             <groupId>org.wso2.orbit.com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
@@ -364,39 +373,58 @@
             <groupId>org.wso2.orbit.com.googlecode.libphonenumber</groupId>
             <artifactId>libphonenumber</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.agent</artifactId>
+            <classifier>runtime</classifier>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.powermock</groupId>
+            <artifactId>powermock-api-mockito2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.powermock</groupId>
+            <artifactId>powermock-module-junit4</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.activemq</groupId>
+            <artifactId>activemq-broker</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Jaeger Tracing -->
 		<dependency>
-			<groupId>org.jacoco</groupId>
-			<artifactId>org.jacoco.agent</artifactId>
-			<classifier>runtime</classifier>
-			<scope>test</scope>
+			<groupId>org.wso2.orbit.io.jaeger</groupId>
+			<artifactId>jaeger-client</artifactId>
 		</dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.stefanbirkner</groupId>
+            <artifactId>system-rules</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.powermock</groupId>
+            <artifactId>powermock-api-mockito2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.powermock</groupId>
+            <artifactId>powermock-module-junit4</artifactId>
+            <scope>test</scope>
+        </dependency>
 		<dependency>
-			<groupId>org.powermock</groupId>
-			<artifactId>powermock-api-mockito2</artifactId>
-			<scope>test</scope>
+			<groupId>org.json.wso2</groupId>
+			<artifactId>json</artifactId>
+			<version>${org.wso2.json.version}</version>
 		</dependency>
-		<dependency>
-			<groupId>org.powermock</groupId>
-			<artifactId>powermock-module-junit4</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.activemq</groupId>
-			<artifactId>activemq-broker</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>slf4j-log4j12</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>com.github.stefanbirkner</groupId>
-			<artifactId>system-rules</artifactId>
-			<scope>test</scope>
-		</dependency>
-	</dependencies>
-<properties>
-		<version.orbit.rabbitmq>3.6.6.wso2v1</version.orbit.rabbitmq>
-	</properties>
+    </dependencies>
 </project>

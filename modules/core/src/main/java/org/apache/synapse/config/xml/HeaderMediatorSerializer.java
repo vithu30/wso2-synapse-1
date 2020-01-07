@@ -72,7 +72,7 @@ public class HeaderMediatorSerializer extends AbstractMediatorSerializer {
 
             } else if (mediator.getExpression() != null) {
 
-                SynapseXPathSerializer.serializeXPath(
+                SynapsePathSerializer.serializePath(
                     mediator.getExpression(), header, "expression");
 
             } else if (!mediator.isImplicit()) {
@@ -84,6 +84,9 @@ public class HeaderMediatorSerializer extends AbstractMediatorSerializer {
                 header.addChild(e);
             }
         }
+
+        serializeComments(header, mediator.getCommentsList());
+
         return header;
     }
 

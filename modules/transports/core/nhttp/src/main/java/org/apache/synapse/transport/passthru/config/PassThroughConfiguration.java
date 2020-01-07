@@ -20,6 +20,7 @@ package org.apache.synapse.transport.passthru.config;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.params.HttpConnectionParams;
 import org.apache.synapse.transport.passthru.PassThroughConstants;
 
 import java.io.File;
@@ -47,6 +48,7 @@ public class PassThroughConfiguration {
                                                          Runtime.getRuntime().availableProcessors();
     private static final int DEFAULT_MAX_ACTIVE_CON = -1;
     private static final int DEFAULT_LISTENER_SHUTDOWN_WAIT_TIME = 0;
+    private static final int DEFAULT_CONNECTION_GRACE_TIME = 3000;
     private Boolean isKeepAliveDisabled = null;
 
     //additional rest dispatch handlers
@@ -54,6 +56,12 @@ public class PassThroughConfiguration {
     // URI configurations that determine if it requires custom rest dispatcher
     private static final String REST_URI_API_REGEX = "rest_uri_api_regex";
     private static final String REST_URI_PROXY_REGEX = "rest_uri_proxy_regex";
+
+    /** Reverse proxy mode is enabled or not */
+    private Boolean reverseProxyMode = null;
+
+    /** Default Synapse service name */
+    private String passThroughDefaultServiceName = null;
 
     private static final Log log = LogFactory.getLog(PassThroughConfiguration.class);
 
@@ -137,13 +145,37 @@ public class PassThroughConfiguration {
     }
 
     public int getConnectionIdleTime() {
-        return getIntProperty(PassThroughConfigPNames.CONNECTION_IDLE_TIME, Integer.MAX_VALUE);
+
+        int idleTime;
+        // Giving higher priority for grace time if it is configured, than for the configured idle time
+        if (isIntPropertyConfigured(PassThroughConfigPNames.CONNECTION_GRACE_TIME)) {
+            idleTime = getIdleTimeFromGraceTime();
+        } else {
+            // Setting idle time if it is configured, if not, using the default grace time to calculate idle time
+            idleTime = getIntProperty(PassThroughConfigPNames.CONNECTION_IDLE_TIME, getIdleTimeFromGraceTime());
+        }
+
+        if (idleTime < 0) {
+            return 0;
+        }
+        return idleTime;
     }
     public int getMaximumConnectionLifespan() {
         return getIntProperty(PassThroughConfigPNames.MAXIMUM_CONNECTION_LIFESPAN, Integer.MAX_VALUE);
     }
+    public int getConnectionGraceTime() {
+        return getIntProperty(PassThroughConfigPNames.CONNECTION_GRACE_TIME, DEFAULT_CONNECTION_GRACE_TIME);
+    }
 
-    public String getCorrelationHeaderName(){
+    /**
+     * For the default value, grace time is reduced to avoid connection being used at the moment it is being closed
+     * @return default connection idle time
+     */
+    private int getIdleTimeFromGraceTime(){
+        return getIntProperty(HttpConnectionParams.SO_TIMEOUT, 60000) - getConnectionGraceTime();
+    }
+
+    public String getCorrelationHeaderName() {
         return getStringProperty(PassThroughConfigPNames.CORRELATION_HEADER_NAME_PROPERTY,
                 PassThroughConstants.CORRELATION_DEFAULT_HEADER);
     }
@@ -162,10 +194,10 @@ public class PassThroughConfiguration {
          if (log.isDebugEnabled()) {
              log.debug("Loading the file '" + filePath + "' from classpath");
          }
-         
+
          InputStream in  = null;
-         
-         //if we reach to this assume that the we may have to looking to the customer provided external location for the 
+
+         //if we reach to this assume that the we may have to looking to the customer provided external location for the
          //given properties
  		if (System.getProperty(PassThroughConstants.CONF_LOCATION) != null) {
  			try {
@@ -235,6 +267,35 @@ public class PassThroughConfiguration {
         }
 
         return def;
+    }
+
+    /**
+     * Return true if user has configured an int property that tunes pass-through http transport
+     * @param name  name of the system/config property
+     * @return      true if property is configured
+     */
+    private boolean isIntPropertyConfigured(String name) {
+
+        String val = System.getProperty(name);
+        if (val == null) {
+            val = props.getProperty(name);
+        }
+
+        if (val != null) {
+            try {
+                Integer.parseInt(val);
+            } catch (NumberFormatException e) {
+                log.warn("Incorrect pass-through http tuning property value. " + name +
+                        " must be an integer");
+                return false;
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("Using configured pass-through http tuning property value for : " + name);
+            }
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -313,4 +374,27 @@ public class PassThroughConfiguration {
         return getBooleanProperty(PassThroughConfigPNames.HTTP_LISTENING_IO_REACTOR_SHARING_ENABLE, false);
     }
 
+    /**
+     * Check for reverse proxy mode
+     *
+     * @return whether reverse proxy mode is enabled
+     */
+    public boolean isReverseProxyMode() {
+        if (reverseProxyMode == null) {
+            reverseProxyMode = Boolean.parseBoolean(System.getProperty("reverseProxyMode"));
+        }
+        return reverseProxyMode;
+    }
+
+    /**
+     * Get the default synapse service name
+     *
+     * @return default synapse service name
+     */
+    public String getPassThroughDefaultServiceName() {
+        if (passThroughDefaultServiceName == null) {
+            passThroughDefaultServiceName = getStringProperty("passthru.default.service", "__SynapseService");
+        }
+        return passThroughDefaultServiceName;
+    }
 }

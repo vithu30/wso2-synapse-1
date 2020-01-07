@@ -26,6 +26,7 @@ import org.apache.http.protocol.HTTP;
 import org.apache.synapse.ManagedLifecycle;
 import org.apache.synapse.Mediator;
 import org.apache.synapse.MessageContext;
+import org.apache.synapse.SynapseArtifact;
 import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.aspects.AspectConfigurable;
 import org.apache.synapse.aspects.AspectConfiguration;
@@ -50,13 +51,19 @@ import org.apache.synapse.transport.passthru.config.SourceConfiguration;
 
 import java.util.*;
 
-public class API extends AbstractRESTProcessor implements ManagedLifecycle, AspectConfigurable {
+public class API extends AbstractRESTProcessor implements ManagedLifecycle, AspectConfigurable, SynapseArtifact {
 
     private String host;
     private int port = -1;
     private String context;
     private Map<String,Resource> resources = new LinkedHashMap<String,Resource>();
     private List<Handler> handlers = new ArrayList<Handler>();
+    private String swaggerResourcePath;
+
+    /**
+     * The Api description. This could be optional informative text about the Api.
+     */
+    private String description;
 
     private int protocol = RESTConstants.PROTOCOL_HTTP_AND_HTTPS;
 
@@ -74,6 +81,11 @@ public class API extends AbstractRESTProcessor implements ManagedLifecycle, Aspe
     private boolean isEdited = false;
 
     private AspectConfiguration aspectConfiguration;
+
+    /**
+     * Comment Texts List associated with the API
+     */
+    private List<String> commentsList = new ArrayList<String>();
 
     public API(String name, String context) {
         super(name);
@@ -164,6 +176,22 @@ public class API extends AbstractRESTProcessor implements ManagedLifecycle, Aspe
 
     public void setFileName(String fileName) {
         this.fileName = fileName;
+    }
+
+    public List<String> getCommentsList() {
+        return commentsList;
+    }
+
+    public void setCommentsList(List<String> commentsList) {
+        this.commentsList = commentsList;
+    }
+
+    public String getSwaggerResourcePath() {
+        return swaggerResourcePath;
+    }
+
+    public void setSwaggerResourcePath(String swaggerResourcePath) {
+        this.swaggerResourcePath = swaggerResourcePath;
     }
 
     public void addResource(Resource resource) {
@@ -292,6 +320,7 @@ public class API extends AbstractRESTProcessor implements ManagedLifecycle, Aspe
         synCtx.setProperty(RESTConstants.SYNAPSE_REST_API_VERSION, versionStrategy.getVersion());
         synCtx.setProperty(RESTConstants.REST_API_CONTEXT, context);
         synCtx.setProperty(RESTConstants.SYNAPSE_REST_API_VERSION_STRATEGY, versionStrategy.getVersionType());
+        synCtx.setProperty(SynapseConstants.ARTIFACT_NAME, SynapseConstants.FAIL_SAFE_MODE_API + getName());
 
         // get API log for this message and attach to the message context
         ((Axis2MessageContext) synCtx).setServiceLog(apiLog);
@@ -316,7 +345,7 @@ public class API extends AbstractRESTProcessor implements ManagedLifecycle, Aspe
 			((Axis2MessageContext) synCtx).getAxis2MessageContext().
 							setProperty(NhttpConstants.REST_URL_POSTFIX,restURLPostfix);
 		}
-        if (synCtx.isResponse()){
+        if (synCtx.isResponse()) {
             org.apache.axis2.context.MessageContext context = ((Axis2MessageContext) synCtx).getAxis2MessageContext();
             if (context.isPropertyTrue(PassThroughConstants.CORRELATION_LOG_STATE_PROPERTY)) {
                 Map headers = (Map) context.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
@@ -596,5 +625,15 @@ public class API extends AbstractRESTProcessor implements ManagedLifecycle, Aspe
             resource.setComponentStatisticsId(holder);
         }
         StatisticIdentityGenerator.reportingEndEvent(apiId, ComponentType.API, holder);
+    }
+
+    @Override
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    @Override
+    public String getDescription() {
+        return description;
     }
 }
